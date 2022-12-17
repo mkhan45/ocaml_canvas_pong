@@ -6,6 +6,8 @@ open Js_of_ocaml
 let (>.) = Float.(>)
 let (<.) = Float.(<)
 
+let _ = Random.self_init
+
 let graphics = 
     let graphics = new%js graphics () in
     let _ = graphics##beginFill 0xffffff
@@ -49,9 +51,15 @@ module Vector = struct
 
     module Ops = struct
         let (<+>) a b = { x = a.x +. b.x; y = a.y +. b.y }
+        let (<*>) a s = { x = a.x *. s; y = a.y *. s }
     end
 end
 open Vector.Ops
+let random_vel () =
+    let rec attempt () = match Random.float 5.0 -. 2.5 with
+    | r when Float.abs r <. 2.0 -> attempt ()
+    | r -> r
+    in Vector.{ x = attempt (); y = attempt () } 
 
 module Rect = struct
     type t = {pos: Vector.t; bounds: Vector.t; vel: Vector.t}
@@ -73,8 +81,9 @@ module Rect = struct
     let integrate { pos; bounds; vel } = { pos = pos <+> vel; bounds; vel }
 end
 
+let init_paddle_speed = 4.5
 module GameState = struct
-    type t = { top_paddle: Rect.t; bottom_paddle: Rect.t; ball: Rect.t }
+    type t = { top_paddle: Rect.t; bottom_paddle: Rect.t; ball: Rect.t; paddle_speed: float }
 
     let draw game =
         let _ = graphics##clear in
@@ -84,35 +93,36 @@ module GameState = struct
         and _ = Rect.draw game.ball in
         ()
 
-    let updated { top_paddle; bottom_paddle; ball } =
+    let updated { top_paddle; bottom_paddle; ball; paddle_speed } =
         { top_paddle = top_paddle
                        |> Rect.integrate
                        |> (fun paddle -> match !input_state with
                        | { left_pressed = true; right_pressed = false; _ } -> 
-                               { paddle with vel = { paddle.vel with x = -2.5 } }
+                               { paddle with vel = { paddle.vel with x = -1.0 *. paddle_speed } }
                        | { left_pressed = false; right_pressed = true; _ } -> 
-                               { paddle with vel = { paddle.vel with x = 2.5 } }
+                               { paddle with vel = { paddle.vel with x = paddle_speed } }
                        | _ -> { paddle with vel = { x = 0.0; y = 0.0 }})
         ; bottom_paddle = bottom_paddle
                           |> Rect.integrate
                           |> (fun paddle -> match !input_state with
                           | { a_pressed = true; d_pressed = false; _ } -> 
-                                  { paddle with vel = { paddle.vel with x = -2.5 } }
+                                  { paddle with vel = { paddle.vel with x = -1.0 *. paddle_speed } }
                           | { a_pressed = false; d_pressed = true; _ } -> 
-                                  { paddle with vel = { paddle.vel with x = 2.5 } }
+                                  { paddle with vel = { paddle.vel with x = paddle_speed } }
                           | _ -> { paddle with vel = { x = 0.0; y = 0.0 }})
         ; ball = ball
                  |> Rect.integrate
-                 |> fun ball -> if Rect.left ball <. 0.0 || Rect.right ball >. 800.0 
+                 |> (fun ball -> if Rect.left ball <. 0.0 || Rect.right ball >. 800.0 
                                 then { ball with vel = { ball.vel with x = ball.vel.x *. -1.0 } }
-                                else ball
-                 |> fun ball -> if Rect.overlap ball top_paddle || Rect.overlap ball bottom_paddle
-                                then { ball with vel = { ball.vel with y = ball.vel.y *. -1.0 } }
-                                else ball
-                 |> fun ball -> if Rect.top ball <. 0.0 || Rect.bottom ball >. 800.0
-                                then { ball with pos = { x = 400.0; y = 400.0 }}
-                                else ball
-        }
+                                else ball)
+                 |> (fun ball -> if Rect.overlap ball top_paddle || Rect.overlap ball bottom_paddle
+                                then { ball with vel = { ball.vel with y = ball.vel.y *. -1.0 } <*> 1.1 }
+                                else ball)
+                 |> (fun ball -> if Rect.top ball <. 0.0 || Rect.bottom ball >. 800.0
+                                then { ball with pos = { x = 400.0; y = 400.0 }; vel = random_vel () }
+                                else ball)
+        ; paddle_speed = if Rect.overlap top_paddle ball || Rect.overlap bottom_paddle ball
+                         then paddle_speed *. 1.1 else paddle_speed }
 end
 
 let paddle_bounds = Vector.{x = 90.0; y = 10.0}
@@ -131,8 +141,9 @@ let game_state = ref GameState.{
     ball = Rect.{
         pos = Vector.{x = 400.0; y = 400.0};
         bounds = Vector.{x = 12.0; y = 12.0};
-        vel = Vector.{x = 1.0; y = 2.0};
+        vel = random_vel ();
     };
+    paddle_speed = init_paddle_speed;
 }
 
 let update _delta =
