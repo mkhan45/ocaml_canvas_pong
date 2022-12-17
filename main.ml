@@ -1,7 +1,9 @@
 open Core
 
-open Pixi_bindings
 open Js_of_ocaml
+open Pixi_bindings
+open Util
+open Util.Vector.Ops
 
 let (>.) = Float.(>)
 let (<.) = Float.(<)
@@ -21,43 +23,14 @@ let app =
     and _ = app##.stage##addChild(graphics) in
     app
 
-(* Stores pressed inputs, since JS only gives events *)
-type input = { left_pressed: bool
-             ; right_pressed: bool
-             ; a_pressed: bool
-             ; d_pressed: bool }
+let _ = Js.Unsafe.global##addEventListener "keyup" Input.handle_keyup
+let _ = Js.Unsafe.global##addEventListener "keydown" Input.handle_keydown
 
-let input_state = ref { left_pressed = false
-                      ; right_pressed = false
-                      ; a_pressed = false
-                      ; d_pressed = false }
+module Rect = struct
+    include Util.Rect
 
-let handle_keyup ev = match (Js.to_string ev##.key) with
-| "a" -> input_state := { !input_state with a_pressed = false }
-| "d" -> input_state := { !input_state with d_pressed = false }
-| "ArrowLeft" -> input_state := { !input_state with left_pressed = false }
-| "ArrowRight" -> input_state := { !input_state with right_pressed = false }
-| _ -> ()
-
-let handle_keydown ev = match (Js.to_string ev##.key) with
-| "a" -> input_state := { !input_state with a_pressed = true }
-| "d" -> input_state := { !input_state with d_pressed = true }
-| "ArrowLeft" -> input_state := { !input_state with left_pressed = true }
-| "ArrowRight" -> input_state := { !input_state with right_pressed = true }
-| _ -> ()
-
-let _ = Js.Unsafe.global##addEventListener "keyup" handle_keyup
-let _ = Js.Unsafe.global##addEventListener "keydown" handle_keydown
-
-module Vector = struct
-    type t = {x: float; y: float}
-
-    module Ops = struct
-        let (<+>) a b = { x = a.x +. b.x; y = a.y +. b.y }
-        let (<*>) a s = { x = a.x *. s; y = a.y *. s }
-    end
+    let draw { pos; bounds; _ } = graphics##drawRect pos.x pos.y bounds.x bounds.y
 end
-open Vector.Ops
 
 (* Makes a sane random velocity *)
 let random_vel () =
@@ -66,27 +39,7 @@ let random_vel () =
     | r -> r
     in Vector.{ x = attempt (); y = attempt () } 
 
-module Rect = struct
-    type t = {pos: Vector.t; bounds: Vector.t; vel: Vector.t}
-
-    let top rect = rect.pos.y
-    let bottom rect = rect.pos.y +. rect.bounds.y
-
-    let left rect = rect.pos.x
-    let right rect = rect.pos.x +. rect.bounds.x
-
-    let overlaps a b = List.for_all ~f:(phys_equal false) [
-        left a >. right b;
-        right a <. left b;
-        top a >. bottom b;
-        bottom a <. top b;
-    ]
-
-    let draw { pos; bounds; _ } = graphics##drawRect pos.x pos.y bounds.x bounds.y
-    let integrate { pos; bounds; vel } = { pos = pos <+> vel; bounds; vel }
-end
-
-let paddle_bounds = Vector.{x = 90.0; y = 10.0}
+let paddle_bounds = Vector.{x = 100.0; y = 10.0}
 let init_paddle_speed = 4.5
 
 module GameState = struct
@@ -101,24 +54,26 @@ module GameState = struct
         ()
 
     let updated { top_paddle; bottom_paddle; ball; paddle_speed } =
-        let ball_hit_paddle = Rect.overlaps top_paddle ball || Rect.overlaps bottom_paddle ball
+        let ball_hit_paddle = 
+            (Rect.overlaps top_paddle ball && ball.vel.y <. 0.0) 
+         || (Rect.overlaps bottom_paddle ball && ball.vel.y >. 0.0)
         and point_scored = Rect.top ball <. 0.0 || Rect.bottom ball >. 800.0 in
         { top_paddle = top_paddle
           |> Rect.integrate
-          |> (fun paddle -> match !input_state with
+          |> (fun paddle -> match !Input.input_state with
           | { left_pressed = true; right_pressed = false; _ } -> 
                 { paddle with vel = { paddle.vel with x = -1.0 *. paddle_speed } }
           | { left_pressed = false; right_pressed = true; _ } -> 
                 { paddle with vel = { paddle.vel with x = paddle_speed } }
-          | _ -> { paddle with vel = { x = 0.0; y = 0.0 }})
+          | _ -> { paddle with vel = Vector.zero })
         ; bottom_paddle = bottom_paddle
           |> Rect.integrate
-          |> (fun paddle -> match !input_state with
+          |> (fun paddle -> match !Input.input_state with
               | { a_pressed = true; d_pressed = false; _ } -> 
                       { paddle with vel = { paddle.vel with x = -1.0 *. paddle_speed } }
               | { a_pressed = false; d_pressed = true; _ } -> 
                       { paddle with vel = { paddle.vel with x = paddle_speed } }
-              | _ -> { paddle with vel = { x = 0.0; y = 0.0 }})
+              | _ -> { paddle with vel = Vector.zero })
         ; ball = ball
           |> Rect.integrate
           |> (fun ball -> if Rect.left ball <. 0.0 || Rect.right ball >. 800.0 
@@ -141,12 +96,12 @@ let game_state = ref GameState.{
     top_paddle = Rect.{ 
         pos = Vector.{x = 400.0 -. paddle_bounds.x /. 2.0; y = 10.0}; 
         bounds = paddle_bounds;
-        vel = Vector.{x = 0.0; y = 0.0};
+        vel = Vector.zero
     };
     bottom_paddle = Rect.{
         pos = Vector.{x = 400.0 -. paddle_bounds.x /. 2.0; y = 780.0}; 
         bounds = paddle_bounds;
-        vel = Vector.{x = 0.0; y = 0.0};
+        vel = Vector.zero
     };
     ball = Rect.{
         pos = Vector.{x = 400.0; y = 400.0};

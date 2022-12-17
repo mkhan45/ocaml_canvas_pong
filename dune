@@ -1,7 +1,7 @@
 (executable
   (name main) ; asking dune to build hello.ml
   (libraries core)
-  (modules main pixi_bindings)
+  (modules main input util pixi_bindings)
   (preprocess (pps js_of_ocaml-ppx))
   (modes js)
 )
