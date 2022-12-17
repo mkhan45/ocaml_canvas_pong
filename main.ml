@@ -122,7 +122,9 @@ module GameState = struct
                                 then { ball with pos = { x = 400.0; y = 400.0 }; vel = random_vel () }
                                 else ball)
         ; paddle_speed = if Rect.overlap top_paddle ball || Rect.overlap bottom_paddle ball
-                         then paddle_speed *. 1.1 else paddle_speed }
+                         then paddle_speed *. 1.1 
+                         else if Rect.top ball <. 0.0 || Rect.bottom ball >. 800.0 then 0.0
+                         else paddle_speed }
 end
 
 let paddle_bounds = Vector.{x = 90.0; y = 10.0}
