@@ -106,9 +106,11 @@ module GameState = struct
                  |> fun ball -> if Rect.left ball <. 0.0 || Rect.right ball >. 800.0 
                                 then { ball with vel = { ball.vel with x = ball.vel.x *. -1.0 } }
                                 else ball
-                 |> fun ball -> if Rect.top ball <. 0.0 || Rect.bottom ball >. 800.0 
-                                || Rect.overlap ball top_paddle || Rect.overlap ball bottom_paddle
+                 |> fun ball -> if Rect.overlap ball top_paddle || Rect.overlap ball bottom_paddle
                                 then { ball with vel = { ball.vel with y = ball.vel.y *. -1.0 } }
+                                else ball
+                 |> fun ball -> if Rect.top ball <. 0.0 || Rect.bottom ball >. 800.0
+                                then { ball with pos = { x = 400.0; y = 400.0 }}
                                 else ball
         }
 end
