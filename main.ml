@@ -3,7 +3,8 @@ open Core
 open Js_of_ocaml
 open Pixi_bindings
 open Util
-open Util.Vector.Ops
+
+open Lens.Infix
 
 let (>.) = Float.(>)
 let (<.) = Float.(<)
@@ -28,7 +29,8 @@ let random_vel () =
     in Vector.{ x = attempt (); y = attempt () } 
 
 module GameState = struct
-    type t = { top_paddle: Rect.t; bottom_paddle: Rect.t; ball: Rect.t; paddle_speed: float }
+    type t = { top_paddle: Rect.t; bottom_paddle: Rect.t; ball: Rect.t; paddle_speed: float } 
+             [@@deriving lens] 
 
     let draw game =
         let _ = graphics##clear in
@@ -48,10 +50,10 @@ module GameState = struct
           |> Rect.integrate
           |> (fun paddle -> match !Input.input_state with
           | { left_pressed = true; right_pressed = false; _ } -> 
-                { paddle with vel = { paddle.vel with x = -1.0 *. paddle_speed } }
+                paddle |> ((Rect.vel |-- Vector.x) ^= -1.0 *. paddle_speed)
 
           | { left_pressed = false; right_pressed = true; _ } -> 
-                { paddle with vel = { paddle.vel with x = paddle_speed } }
+                paddle |> ((Rect.vel |-- Vector.x) ^= paddle_speed)
 
           | _ -> { paddle with vel = Vector.zero })
 
@@ -59,21 +61,21 @@ module GameState = struct
           |> Rect.integrate
           |> (fun paddle -> match !Input.input_state with
               | { a_pressed = true; d_pressed = false; _ } -> 
-                      { paddle with vel = { paddle.vel with x = -1.0 *. paddle_speed } }
+                      paddle |> ((Rect.vel |-- Vector.x) ^= -1.0 *. paddle_speed)
 
               | { a_pressed = false; d_pressed = true; _ } -> 
-                      { paddle with vel = { paddle.vel with x = paddle_speed } }
+                      paddle |> ((Rect.vel |-- Vector.x) ^= paddle_speed)
 
               | _ -> { paddle with vel = Vector.zero })
 
         ; ball = ball
           |> Rect.integrate
           |> (fun ball -> if Rect.left ball <. 0.0 || Rect.right ball >. 800.0 
-                          then { ball with vel = { ball.vel with x = ball.vel.x *. -1.0 } }
+                          then Lens.modify (Rect.vel |-- Vector.x) (( *. ) (-1.0)) ball
                           else ball)
 
           |> (fun ball -> if ball_hit_paddle
-                          then { ball with vel = { ball.vel with y = ball.vel.y *. -1.0 } <*> 1.1 }
+                          then Lens.modify Rect.vel (fun vel -> { x = vel.x *. 1.0; y = vel.y *. -1.1 }) ball
                           else ball)
 
           |> (fun ball -> if point_scored

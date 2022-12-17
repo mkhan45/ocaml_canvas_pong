@@ -4,7 +4,7 @@ let (>.) = Float.(>)
 let (<.) = Float.(<)
 
 module Vector = struct
-    type t = {x: float; y: float}
+    type t = {x: float; y: float} [@@deriving lens]
 
     let zero = { x = 0.0; y = 0.0 }
 
@@ -16,7 +16,7 @@ end
 
 open Vector.Ops
 module Rect = struct
-    type t = {pos: Vector.t; bounds: Vector.t; vel: Vector.t}
+    type t = {pos: Vector.t; bounds: Vector.t; vel: Vector.t} [@@deriving lens]
 
     let top rect = rect.pos.y
     let bottom rect = rect.pos.y +. rect.bounds.y
