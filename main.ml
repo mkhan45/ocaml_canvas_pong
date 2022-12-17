@@ -17,6 +17,33 @@ let app =
     and _ = app##.stage##addChild(graphics) in
     app
 
+type input = { left_pressed: bool
+             ; right_pressed: bool
+             ; a_pressed: bool
+             ; d_pressed: bool }
+
+let input_state = ref { left_pressed = false
+                      ; right_pressed = false
+                      ; a_pressed = false
+                      ; d_pressed = false }
+
+let handle_keyup ev = match (Js.to_string ev##.key) with
+| "a" -> input_state := { !input_state with a_pressed = false }
+| "d" -> input_state := { !input_state with d_pressed = false }
+| "ArrowLeft" -> input_state := { !input_state with left_pressed = false }
+| "ArrowRight" -> input_state := { !input_state with right_pressed = false }
+| _ -> ()
+
+let handle_keydown ev = match (Js.to_string ev##.key) with
+| "a" -> input_state := { !input_state with a_pressed = true }
+| "d" -> input_state := { !input_state with d_pressed = true }
+| "ArrowLeft" -> input_state := { !input_state with left_pressed = true }
+| "ArrowRight" -> input_state := { !input_state with right_pressed = true }
+| _ -> ()
+
+let _ = Js.Unsafe.global##addEventListener "keyup" handle_keyup
+let _ = Js.Unsafe.global##addEventListener "keydown" handle_keydown
+
 module Vector = struct
     type t = {x: float; y: float}
 
@@ -58,20 +85,35 @@ module GameState = struct
         ()
 
     let updated { top_paddle; bottom_paddle; ball } =
-        { top_paddle = Rect.integrate top_paddle
-        ; bottom_paddle = Rect.integrate bottom_paddle
+        { top_paddle = top_paddle
+                       |> Rect.integrate
+                       |> (fun paddle -> match !input_state with
+                       | { left_pressed = true; right_pressed = false; _ } -> 
+                               { paddle with vel = { paddle.vel with x = -2.5 } }
+                       | { left_pressed = false; right_pressed = true; _ } -> 
+                               { paddle with vel = { paddle.vel with x = 2.5 } }
+                       | _ -> { paddle with vel = { x = 0.0; y = 0.0 }})
+        ; bottom_paddle = bottom_paddle
+                          |> Rect.integrate
+                          |> (fun paddle -> match !input_state with
+                          | { a_pressed = true; d_pressed = false; _ } -> 
+                                  { paddle with vel = { paddle.vel with x = -2.5 } }
+                          | { a_pressed = false; d_pressed = true; _ } -> 
+                                  { paddle with vel = { paddle.vel with x = 2.5 } }
+                          | _ -> { paddle with vel = { x = 0.0; y = 0.0 }})
         ; ball = ball
                  |> Rect.integrate
                  |> fun ball -> if Rect.left ball <. 0.0 || Rect.right ball >. 800.0 
-                                then { ball with vel = { x = -1.0 *. ball.vel.x; y = ball.vel.y } }
+                                then { ball with vel = { ball.vel with x = ball.vel.x *. -1.0 } }
                                 else ball
                  |> fun ball -> if Rect.top ball <. 0.0 || Rect.bottom ball >. 800.0 
-                                then { ball with vel = { y = -1.0 *. ball.vel.y; x = ball.vel.x } }
+                                || Rect.overlap ball top_paddle || Rect.overlap ball bottom_paddle
+                                then { ball with vel = { ball.vel with y = ball.vel.y *. -1.0 } }
                                 else ball
         }
 end
 
-let paddle_bounds = Vector.{x = 70.0; y = 10.0}
+let paddle_bounds = Vector.{x = 90.0; y = 10.0}
 
 let game_state = ref GameState.{
     top_paddle = Rect.{ 
