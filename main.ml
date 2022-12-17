@@ -86,6 +86,9 @@ module Rect = struct
     let integrate { pos; bounds; vel } = { pos = pos <+> vel; bounds; vel }
 end
 
+let paddle_bounds = Vector.{x = 90.0; y = 10.0}
+let init_paddle_speed = 4.5
+
 module GameState = struct
     type t = { top_paddle: Rect.t; bottom_paddle: Rect.t; ball: Rect.t; paddle_speed: float }
 
@@ -129,12 +132,9 @@ module GameState = struct
                           else ball)
         ; paddle_speed = 
             if ball_hit_paddle then paddle_speed *. 1.1 
-            else if point_scored then 0.0
+            else if point_scored then init_paddle_speed
             else paddle_speed }
 end
-
-let paddle_bounds = Vector.{x = 90.0; y = 10.0}
-let init_paddle_speed = 4.5
 
 (* Initial Game State *)
 let game_state = ref GameState.{
