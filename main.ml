@@ -1,6 +1,5 @@
 open Core
 
-open Js_of_ocaml
 open Pixi_bindings
 open Util
 
@@ -9,7 +8,6 @@ open Lens.Infix
 let (>.) = Float.(>)
 let (<.) = Float.(<)
 
-let _ = Random.self_init
 let paddle_bounds = Vector.{x = 100.0; y = 10.0}
 let init_paddle_speed = 4.5
 
@@ -23,10 +21,11 @@ end
 
 (* Makes a sane random velocity *)
 let random_vel () =
-    let rec attempt () = match Random.float 5.0 -. 2.5 with
-    | r when Float.abs r <. 2.0 -> attempt ()
-    | r -> r
-    in Vector.{ x = attempt (); y = attempt () } 
+    let random_x = Random.float 5.0
+    and random_y = Random.float 2.5 +. 2.5
+    and invert_x = if Random.bool () then -1.0 else 1.0
+    and invert_y = if Random.bool () then -1.0 else 1.0
+    in Vector.{x = random_x *. invert_x; y = random_y *. invert_y}
 
 module GameState = struct
     type t = { top_paddle: Rect.t; bottom_paddle: Rect.t; ball: Rect.t; paddle_speed: float } 
@@ -35,10 +34,7 @@ module GameState = struct
     let draw game =
         let _ = graphics##clear in
         let _ = graphics##beginFill 0xffffff in
-        let _ = Rect.draw game.top_paddle
-        and _ = Rect.draw game.bottom_paddle
-        and _ = Rect.draw game.ball in
-        ()
+        List.iter ~f:Rect.draw [game.top_paddle; game.bottom_paddle; game.ball]
 
     let updated { top_paddle; bottom_paddle; ball; paddle_speed } =
         let ball_hit_paddle = 
@@ -108,14 +104,7 @@ let game_state = ref GameState.{
     paddle_speed = init_paddle_speed;
 }
 
-let update _delta =
+let _ = app##.ticker##add (fun _delta -> begin
     GameState.draw !game_state;
     game_state := GameState.updated !game_state
-
-let () =
-    Js.Unsafe.global##.pong := object%js
-        val app = app
-        val graphics = graphics
-    end;
-    let _ = app##.ticker##add update in
-    ()
+end)
