@@ -1,4 +1,5 @@
 open Core
+open Js_of_ocaml
 
 open Pixi_bindings
 open Util
@@ -8,10 +9,11 @@ open Lens.Infix
 let (>.) = Float.(>)
 let (<.) = Float.(<)
 
-let paddle_bounds = Vector.{x = 100.0; y = 10.0}
+let paddle_bounds = Vector.{x = 110.0; y = 10.0}
 let init_paddle_speed = 4.5
 
 let (graphics, app) = pixi_setup ()
+let ball_speed_label = Dom_html.getElementById "ball-speed"
 
 module Rect = struct
     include Util.Rect
@@ -106,5 +108,6 @@ let game_state = ref GameState.{
 
 let _ = app##.ticker##add (fun _delta -> begin
     GameState.draw !game_state;
-    game_state := GameState.updated !game_state
+    game_state := GameState.updated !game_state;
+    ball_speed_label##.innerHTML := !game_state.ball.vel |> Vector.magnitude |> Float.to_string_hum |> Js.string;
 end)

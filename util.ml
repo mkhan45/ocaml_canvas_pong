@@ -8,6 +8,8 @@ module Vector = struct
 
     let zero = { x = 0.0; y = 0.0 }
 
+    let magnitude { x; y } = Float.sqrt ((x *. x) +. (y *. y))
+
     module Ops = struct
         let (<+>) a b = { x = a.x +. b.x; y = a.y +. b.y }
         let (<*>) a s = { x = a.x *. s; y = a.y *. s }
