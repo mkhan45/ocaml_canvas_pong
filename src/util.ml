@@ -33,5 +33,5 @@ module Rect = struct
         bottom a <. top b;
     ]
 
-    let integrate { pos; bounds; vel } = { pos = pos <+> vel; bounds; vel }
+    let integrate rect = { rect with pos = rect.pos <+> rect.vel }
 end

@@ -24,4 +24,5 @@ let pixi_setup () =
 
     let _ = Js.Unsafe.global##addEventListener "keyup" Input.handle_keyup
     and _ = Js.Unsafe.global##addEventListener "keydown" Input.handle_keydown
+
     in (graphics, app)

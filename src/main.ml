@@ -3,17 +3,22 @@ open Js_of_ocaml
 
 open Pixi_bindings
 open Util
+open Util.Vector.Ops
 
 open Lens.Infix
-
-let (>.) = Float.(>)
-let (<.) = Float.(<)
 
 let paddle_bounds = Vector.{x = 110.0; y = 10.0}
 let init_paddle_speed = 4.5
 
 let (graphics, app) = pixi_setup ()
 let ball_speed_label = Dom_html.getElementById "ball-speed"
+
+let _ = 
+    let top_ai_btn = Dom_html.getElementById "top-ai"
+    and btm_ai_btn = Dom_html.getElementById "btm-ai"
+    in
+    top_ai_btn##.onclick := Dom_html.handler (fun _ -> Ai.top_ai := not !Ai.top_ai; Js._false);
+    btm_ai_btn##.onclick := Dom_html.handler (fun _ -> Ai.bottom_ai := not !Ai.bottom_ai; Js._false);
 
 module Rect = struct
     include Util.Rect
@@ -30,15 +35,18 @@ let random_vel () =
     in Vector.{x = random_x *. invert_x; y = random_y *. invert_y}
 
 module GameState = struct
-    type t = { top_paddle: Rect.t; bottom_paddle: Rect.t; ball: Rect.t; paddle_speed: float } 
-             [@@deriving lens] 
+    type t = { top_paddle: Rect.t
+             ; bottom_paddle: Rect.t
+             ; ball: Rect.t
+             ; paddle_speed: float 
+             ; paused: bool } [@@deriving lens] 
 
     let draw game =
         let _ = graphics##clear in
         let _ = graphics##beginFill 0xffffff in
         List.iter ~f:Rect.draw [game.top_paddle; game.bottom_paddle; game.ball]
 
-    let updated { top_paddle; bottom_paddle; ball; paddle_speed } =
+    let updated { top_paddle; bottom_paddle; ball; paddle_speed; paused } =
         let ball_hit_paddle = 
             (Rect.overlaps top_paddle ball && ball.vel.y <. 0.0) 
          || (Rect.overlaps bottom_paddle ball && ball.vel.y >. 0.0)
@@ -53,7 +61,9 @@ module GameState = struct
           | { left_pressed = false; right_pressed = true; _ } -> 
                 paddle |> ((Rect.vel |-- Vector.x) ^= paddle_speed)
 
-          | _ -> { paddle with vel = Vector.zero })
+          | _ -> paddle |> (Rect.vel ^= Vector.zero))
+          |> (fun paddle -> if !Ai.top_ai then Ai.ai_moved ~ball ~paddle_speed paddle else paddle)
+          |> (fun new_paddle -> if paused then top_paddle else new_paddle)
 
         ; bottom_paddle = bottom_paddle
           |> Rect.integrate
@@ -64,7 +74,9 @@ module GameState = struct
               | { a_pressed = false; d_pressed = true; _ } -> 
                       paddle |> ((Rect.vel |-- Vector.x) ^= paddle_speed)
 
-              | _ -> { paddle with vel = Vector.zero })
+              | _ -> paddle |> (Rect.vel ^= Vector.zero))
+          |> (fun paddle -> if !Ai.bottom_ai then Ai.ai_moved ~ball ~paddle_speed paddle else paddle)
+          |> (fun new_paddle -> if paused then bottom_paddle else new_paddle)
 
         ; ball = ball
           |> Rect.integrate
@@ -73,17 +85,19 @@ module GameState = struct
                           else ball)
 
           |> (fun ball -> if ball_hit_paddle
-                          then Lens.modify Rect.vel (fun vel -> { x = vel.x *. 1.0; y = vel.y *. -1.1 }) ball
+                          then Lens.modify Rect.vel (fun vel -> { vel with y = vel.y *. -1.0 } <*> 1.1) ball
                           else ball)
 
           |> (fun ball -> if point_scored
                           then { ball with pos = { x = 400.0; y = 400.0 }; vel = random_vel () }
                           else ball)
+          |> (fun new_ball -> if paused then ball else new_ball)
 
         ; paddle_speed = 
             if ball_hit_paddle then paddle_speed *. 1.1 
             else if point_scored then init_paddle_speed
-            else paddle_speed }
+            else paddle_speed 
+        ; paused = if (!Input.input_state).space_pressed then not paused else paused }
 end
 
 (* Initial Game State *)
@@ -104,10 +118,12 @@ let game_state = ref GameState.{
         vel = random_vel ();
     };
     paddle_speed = init_paddle_speed;
+    paused = false;
 }
 
 let _ = app##.ticker##add (fun _delta -> begin
     GameState.draw !game_state;
     game_state := GameState.updated !game_state;
+    Input.input_state := { !Input.input_state with space_pressed = false }; (* Since we only care about a single press*)
     ball_speed_label##.innerHTML := !game_state.ball.vel |> Vector.magnitude |> Float.to_string_hum |> Js.string;
 end)
